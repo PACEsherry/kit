@@ -1,0 +1,400 @@
+/*
+ * Copyright (c) 2021-2022 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef CAMERA_NAPI_UTILS_H_
+#define CAMERA_NAPI_UTILS_H_
+
+#include <cstddef>
+#include <sstream>
+#include "camera_error_code.h"
+#include "camera_napi_const.h"
+#include "js_native_api.h"
+#include "js_native_api_types.h"
+#include "istream_metadata.h"
+#include "napi/native_api.h"
+#include "camera_types.h"
+#include "camera_output_capability.h"
+#include "camera_napi_object.h"
+#include "input/camera_device.h"
+
+#ifdef NAPI_ASSERT
+#undef NAPI_ASSERT
+#endif
+
+#define CAMERA_NAPI_VALUE napi_value
+
+#define NAPI_ASSERT(env, assertion, message) NAPI_ASSERT_BASE(env, assertion, message, nullptr)
+
+#define CAMERA_NAPI_GET_JS_ARGS(env, info, argc, argv, thisVar)        \
+    do {                                                               \
+        void* data;                                                    \
+        napi_get_cb_info(env, info, &(argc), argv, &(thisVar), &data); \
+    } while (0)
+
+#define CAMERA_NAPI_GET_JS_OBJ_WITH_ZERO_ARGS(env, info, status, thisVar)          \
+    do {                                                                           \
+        void* data;                                                                \
+        status = napi_get_cb_info(env, info, nullptr, nullptr, &(thisVar), &data); \
+    } while (0)
+
+#define CAMERA_NAPI_GET_JS_ASYNC_CB_REF(env, arg, count, cbRef) \
+    do {                                                        \
+        napi_valuetype valueType = napi_undefined;              \
+        napi_typeof(env, arg, &valueType);                      \
+        if (valueType == napi_function) {                       \
+            napi_create_reference(env, arg, count, &(cbRef));   \
+        } else {                                                \
+            NAPI_ASSERT(env, false, "type mismatch");           \
+        }                                                       \
+    } while (0)
+
+#define CAMERA_NAPI_ASSERT_NULLPTR_CHECK(env, result) \
+    do {                                              \
+        if ((result) == nullptr) {                    \
+            napi_get_undefined(env, &(result));       \
+            return result;                            \
+        }                                             \
+    } while (0)
+
+#define CAMERA_NAPI_CREATE_PROMISE(env, callbackRef, deferred, result) \
+    do {                                                               \
+        if ((callbackRef) == nullptr) {                                \
+            napi_create_promise(env, &(deferred), &(result));          \
+        }                                                              \
+    } while (0)
+
+#define CAMERA_NAPI_CREATE_RESOURCE_NAME(env, resource, resourceName)              \
+    do {                                                                           \
+        napi_create_string_utf8(env, resourceName, NAPI_AUTO_LENGTH, &(resource)); \
+    } while (0)
+
+#define CAMERA_NAPI_CHECK_NULL_PTR_RETURN_UNDEFINED(env, ptr, ret, message, ...) \
+    do {                                                                         \
+        if ((ptr) == nullptr) {                                                  \
+            MEDIA_ERR_LOG(message, ##__VA_ARGS__);                               \
+            napi_get_undefined(env, &(ret));                                     \
+            return ret;                                                          \
+        }                                                                        \
+    } while (0)
+
+#define CAMERA_NAPI_CHECK_NULL_PTR_RETURN_VOID(ptr, message, ...) \
+    do {                                                          \
+        if ((ptr) == nullptr) {                                   \
+            MEDIA_ERR_LOG(message, ##__VA_ARGS__);                \
+            return;                                               \
+        }                                                         \
+    } while (0)
+
+#define CAMERA_NAPI_ASSERT_EQUAL(condition, errMsg, ...) \
+    do {                                                 \
+        if (!(condition)) {                              \
+            MEDIA_ERR_LOG(errMsg, ##__VA_ARGS__);        \
+            return;                                      \
+        }                                                \
+    } while (0)
+
+#define CAMERA_NAPI_CHECK_AND_BREAK_LOG(cond, fmt, ...) \
+    do {                                                \
+        if (!(cond)) {                                  \
+            MEDIA_ERR_LOG(fmt, ##__VA_ARGS__);          \
+            break;                                      \
+        }                                               \
+    } while (0)
+
+#define CAMERA_NAPI_CHECK_AND_RETURN_LOG(cond, fmt, ...) \
+    do {                                                 \
+        if (!(cond)) {                                   \
+            MEDIA_ERR_LOG(fmt, ##__VA_ARGS__);           \
+            return;                                      \
+        }                                                \
+    } while (0)
+
+namespace OHOS {
+namespace CameraStandard {
+/* Util class used by napi asynchronous methods for making call to js callback function */
+
+class CameraNapiUtils {
+public:
+    static void CreateNapiErrorObject(
+        napi_env env, int32_t errorCode, const char* errString, std::unique_ptr<JSAsyncContextOutput>& jsContext);
+
+    static void InvokeJSAsyncMethod(napi_env env, napi_deferred deferred, napi_ref callbackRef, napi_async_work work,
+        const JSAsyncContextOutput& asyncContext);
+
+    static void InvokeJSAsyncMethodWithUvWork(napi_env env, napi_deferred deferred, napi_ref callbackRef,
+        const JSAsyncContextOutput& asyncContext);
+
+    static int32_t IncrementAndGet(uint32_t& num);
+
+    static void IsEnableSecureCamera(bool isEnable);
+
+    static bool GetEnableSecureCamera();
+
+    static bool CheckInvalidArgument(napi_env env, size_t argc, int32_t length,
+                                     napi_value *argv, CameraSteps step);
+
+    static bool CheckError(napi_env env, int32_t retCode);
+
+    static double FloatToDouble(float val);
+
+    static std::string GetStringArgument(napi_env env, napi_value value);
+
+    static bool IsSameNapiValue(napi_env env, napi_value valueSrc, napi_value valueDst);
+
+    static napi_status CallPromiseFun(
+        napi_env env, napi_value promiseValue, void* data, napi_callback thenCallback, napi_callback catchCallback);
+
+    static std::vector<napi_property_descriptor> GetPropertyDescriptor(
+        std::vector<std::vector<napi_property_descriptor>> descriptors);
+
+    static napi_status CreateObjectWithPropName(
+        napi_env env, napi_value* result, size_t property_count, const char** keys);
+
+    static napi_status CreateObjectWithPropNameAndValues(napi_env env, napi_value* result, size_t property_count,
+        const char** keys, const std::vector<std::string> values);
+
+    static size_t GetNapiArgs(napi_env env, napi_callback_info callbackInfo);
+
+    inline static napi_value GetUndefinedValue(napi_env env)
+    {
+        napi_value result = nullptr;
+        napi_get_undefined(env, &result);
+        return result;
+    }
+
+    inline static napi_value GetBooleanValue(napi_env env, bool value)
+    {
+        napi_value result = nullptr;
+        napi_get_boolean(env, value, &result);
+        return result;
+    }
+
+    /**
+     * Converts a given int32_t value to a napi_value.
+     *
+     * This function creates a JavaScript napi_value of type int32_t from the provided native integer value.
+     *
+     * @param env The N-API environment handle.
+     * @param nativeVal The integer value to convert.
+     * @return The created napi_value representing the int32_t value.
+     */
+    inline static napi_value ToNapiValue(napi_env env, int32_t nativeVal)
+    {
+        napi_value result;
+        napi_create_int32(env, nativeVal, &result);
+        return result;
+    }
+
+    /**
+     * Converts a given uint32_t value to a napi_value.
+     *
+     * This function creates a JavaScript napi_value of type uint32_t from the provided native unsigned integer value.
+     *
+     * @param env The N-API environment handle.
+     * @param nativeVal The integer value to convert.
+     * @return The created napi_value representing the uint32_t value.
+     */
+    inline static napi_value ToNapiValue(napi_env env, uint32_t nativeVal)
+    {
+        napi_value result;
+        napi_create_uint32(env, nativeVal, &result);
+        return result;
+    }
+
+    /**
+     * Converts a given int8_t value to a napi_value.
+     *
+     * This function creates a JavaScript napi_value of type int32_t from the provided native integer value.
+     *
+     * @param env The N-API environment handle.
+     * @param nativeVal The integer value to convert.
+     * @return The created napi_value representing the int32_t value.
+     */
+    inline static napi_value ToNapiValue(napi_env env, int8_t nativeVal)
+    {
+        return ToNapiValue(env, static_cast<int32_t>(nativeVal));
+    }
+
+    /**
+     * Converts a given uint8_t value to a napi_value.
+     *
+     * This function creates a JavaScript napi_value of type uint32_t from the provided native unsigned integer value.
+     *
+     * @param env The N-API environment handle.
+     * @param nativeVal The integer value to convert.
+     * @return The created napi_value representing the uint32_t value.
+     */
+    inline static napi_value ToNapiValue(napi_env env, uint8_t nativeVal)
+    {
+        return ToNapiValue(env, static_cast<uint32_t>(nativeVal));
+    }
+
+    /**
+     * Converts a given int64_t value to a napi_value.
+     *
+     * This function creates a JavaScript napi_value of type int64_t from the provided native integer value.
+     *
+     * @param env The N-API environment handle.
+     * @param nativeVal The integer value to convert.
+     * @return The created napi_value representing the int64_t value.
+     */
+    inline static napi_value ToNapiValue(napi_env env, int64_t nativeVal)
+    {
+        napi_value result;
+        napi_create_int64(env, nativeVal, &result);
+        return result;
+    }
+
+    /**
+     * Converts a given double value to a napi_value.
+     *
+     * This function creates a JavaScript napi_value of type double from the provided native floating-point number
+     * value.
+     *
+     * @param env The N-API environment handle.
+     * @param nativeVal The floating-point number to convert.
+     * @return The created napi_value representing the double value.
+     */
+    inline static napi_value ToNapiValue(napi_env env, double nativeVal)
+    {
+        napi_value result;
+        napi_create_double(env, nativeVal, &result);
+        return result;
+    }
+
+    /**
+     * Converts a given std::string value to a napi_value.
+     *
+     * This function creates a JavaScript napi_value of type string from the provided native string value.
+     *
+     * @param env The N-API environment handle.
+     * @param nativeVal The string to convert.
+     * @return The created napi_value representing the string value.
+     */
+    inline static napi_value ToNapiValue(napi_env env, const std::string& nativeVal)
+    {
+        napi_value result;
+        napi_create_string_utf8(env, nativeVal.c_str(), NAPI_AUTO_LENGTH, &result);
+        return result;
+    }
+
+    /**
+     * Converts a given bool value to a napi_value.
+     *
+     * Converts the provided boolean value to an napi_value of type uint32_t, as boolean values are typically
+     * represented as integers in N-API.
+     *
+     * @param env The N-API environment handle.
+     * @param nativeVal The boolean value to convert.
+     * @return The created napi_value representing the uint32_t value.
+     */
+    inline static napi_value ToNapiValue(napi_env env, bool nativeVal)
+    {
+        return ToNapiValue(env, static_cast<uint32_t>(nativeVal));
+    }
+
+    /**
+     * Converts a given Size value to a napi_value.
+     *
+     * Converts the provided Size value to an napi_value of type object.
+     *
+     * @param env The N-API environment handle.
+     * @param nativeVal The Size value to convert.
+     * @return The created napi_value representing the js object.
+     */
+    inline static napi_value ToNapiValue(napi_env env, Size nativeVal)
+    {
+        CameraNapiObject napiCompositionEffectInfoObj(
+            { { "height", &nativeVal.height }, { "width", &nativeVal.width } });
+        return napiCompositionEffectInfoObj.CreateNapiObjFromMap(env);
+    }
+
+    /**
+     * @brief Convert C++ types to NAPI values
+     *
+     * This function is used to convert C++ enum types or specific vector types to NAPI values.
+     *
+     * @tparam T Template parameter, which can be an enum type or a vector type
+     * @param env The NAPI environment
+     * @param nativeVal The C++ value to be converted
+     * @return napi_value The converted NAPI value
+     */
+    template<typename T,
+        typename = std::enable_if_t<std::is_enum_v<T> || std::is_same_v<T, std::vector<bool>> ||
+            std::is_same_v<T, std::vector<int8_t>> || std::is_same_v<T, std::vector<uint8_t>> ||
+            std::is_same_v<T, std::vector<int32_t>> || std::is_same_v<T, std::vector<int64_t>> ||
+            std::is_same_v<T, std::vector<uint32_t>> || std::is_same_v<T, std::vector<double>> ||
+            std::is_same_v<T, std::vector<std::string>> || std::is_same_v<T, std::vector<Size>>>>
+    static napi_value ToNapiValue(napi_env env, T nativeVal)
+    {
+        napi_value result = CameraNapiUtils::GetUndefinedValue(env);
+        if constexpr (std::is_enum_v<T>) {
+            result = ToNapiValue(env, static_cast<int32_t>(nativeVal));
+        } else {
+            if (napi_create_array(env, &result) == napi_ok) {
+                for (size_t i = 0; i < nativeVal.size(); ++i) {
+                    auto val = nativeVal[i];
+                    napi_set_element(env, result, i, ToNapiValue(env, val));
+                }
+            }
+        }
+        return result;
+    }
+
+    inline static void ThrowError(napi_env env, int32_t code, const char* message)
+    {
+        std::string errorCode = std::to_string(code);
+        napi_throw_error(env, errorCode.c_str(), message);
+    }
+
+    inline static std::string GetTaskName(const std::string& func,
+        const std::unordered_map<std::string, std::string>& params)
+    {
+        std::ostringstream oss;
+        for (const auto& it : params) {
+            if (!oss.str().empty()) {
+                oss << ",";
+            }
+            oss << it.first << ":" << it.second;
+        }
+        std::string taskName = func + "[" + oss.str() + "]";
+        return params.empty()? func : taskName;
+    }
+
+    static void CreateFrameRateJSArray(napi_env env, std::vector<int32_t> frameRateRange, napi_value &result);
+
+    static napi_value CreateSupportFrameRatesJSArray(
+        napi_env env, std::vector<std::vector<int32_t>> supportedFrameRatesRange);
+
+    static napi_value ParseMetadataObjectTypes(napi_env env, napi_value arrayParam,
+                                    std::vector<MetadataObjectType> &metadataObjectTypes);
+
+    static napi_value CreateJSArray(napi_env env, napi_status& status, std::vector<int32_t> nativeArray);
+
+    static napi_value ProcessingPhysicalApertures(napi_env env, std::vector<std::vector<float>> physicalApertures);
+
+    static napi_value CreateJsPointArray(napi_env env, napi_status& status, const std::vector<float>& nativePointArray);
+
+    static std::string GetErrorMessage(int32_t errorCode);
+
+    static bool ParseCameraTypesArray(napi_env env, napi_value typesValue, std::vector<CameraType>& outTypes);
+private:
+    explicit CameraNapiUtils() {};
+
+    static bool mEnableSecure;
+}; // namespace CameraNapiUtils
+} // namespace CameraStandard
+} // namespace OHOS
+#endif /* CAMERA_NAPI_UTILS_H_ */

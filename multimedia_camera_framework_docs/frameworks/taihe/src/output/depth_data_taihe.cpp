@@ -1,0 +1,61 @@
+/*
+ * Copyright (C) 2025 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "depth_data_taihe.h"
+#include "camera_security_utils_taihe.h"
+
+namespace Ani {
+namespace Camera {
+uint32_t DepthDataImpl::depthDataTaskId_ = CAMERA_PREVIEW_OUTPUT_TASKID;
+
+void DepthDataImpl::ReleaseSync()
+{
+    MEDIA_DEBUG_LOG("ReleaseSync is called");
+    CHECK_RETURN_ELOG(!OHOS::CameraStandard::CameraAniSecurity::CheckSystemApp(),
+        "SystemApi ReleaseSync is called!");
+    std::unique_ptr<DepthDataTaiheAsyncContext> asyncContext = std::make_unique<DepthDataTaiheAsyncContext>(
+        "DepthDataImpl::ReleaseSync", CameraUtilsTaihe::IncrementAndGet(depthDataTaskId_));
+    asyncContext->queueTask =
+        CameraTaiheWorkerQueueKeeper::GetInstance()->AcquireWorkerQueueTask("DepthDataImpl::ReleaseSync");
+    asyncContext->objectInfo = this;
+    CAMERA_START_ASYNC_TRACE(asyncContext->funcName, asyncContext->taskId);
+    CameraTaiheWorkerQueueKeeper::GetInstance()->ConsumeWorkerQueueTask(asyncContext->queueTask, [&asyncContext]() {
+        if (asyncContext->objectInfo != nullptr) {
+            asyncContext->objectInfo->pixelMap_->ReleaseSync();
+        }
+        CameraUtilsTaihe::CheckError(asyncContext->errorCode);
+    });
+    CAMERA_FINISH_ASYNC_TRACE(asyncContext->funcName, asyncContext->taskId);
+}
+
+CameraFormat DepthDataImpl::GetFormat()
+{
+    return CameraFormat::from_value(static_cast<int32_t>(format_));
+}
+DepthDataQualityLevel DepthDataImpl::GetQualityLevel()
+{
+    return DepthDataQualityLevel::from_value(static_cast<int32_t>(qualityLevel_));
+}
+DepthDataAccuracy DepthDataImpl::GetDataAccuracy()
+{
+    return DepthDataAccuracy::from_value(static_cast<int32_t>(dataAccuracy_));
+}
+
+ImageTaihe::PixelMap DepthDataImpl::GetDepthMap()
+{
+    return pixelMap_;
+}
+} // namespace Camera
+} // namespace Ani

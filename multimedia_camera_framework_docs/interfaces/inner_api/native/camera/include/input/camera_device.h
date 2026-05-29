@@ -1,0 +1,456 @@
+/*
+ * Copyright (c) 2021-2024 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OHOS_CAMERA_CAMERA_DEVICE_H
+#define OHOS_CAMERA_CAMERA_DEVICE_H
+
+#include <iostream>
+#include <memory>
+#include <refbase.h>
+#include <type_traits>
+#include <unordered_map>
+#include <vector>
+
+#include "camera_metadata_info.h"
+#include "output/camera_output_capability.h"
+#include "output/capture_output.h"
+#include "ability/camera_ability.h"
+#include "ability/camera_ability_parse_util.h"
+#include "color_space_info_parse.h"
+
+namespace OHOS {
+namespace CameraStandard {
+enum CameraPosition {
+    CAMERA_POSITION_UNSPECIFIED = 0,
+    CAMERA_POSITION_BACK,
+    CAMERA_POSITION_FRONT,
+    CAMERA_POSITION_FOLD_INNER
+};
+
+enum AutomotiveCameraPosition {
+    CAMERA_POSITION_EXTERIOR_UNSPECIFIED = 0,
+    CAMERA_POSITION_EXTERIOR_FRONT,
+    CAMERA_POSITION_EXTERIOR_REAR,
+    CAMERA_POSITION_EXTERIOR_LEFT,
+    CAMERA_POSITION_EXTERIOR_RIGHT,
+    CAMERA_POSITION_INTERIOR_UNSPECIFIED,
+    CAMERA_POSITION_INTERIOR_ROW_1_LEFT,
+    CAMERA_POSITION_INTERIOR_ROW_1_CENTER,
+    CAMERA_POSITION_INTERIOR_ROW_1_RIGHT,
+    CAMERA_POSITION_INTERIOR_ROW_2_LEFT,
+    CAMERA_POSITION_INTERIOR_ROW_2_CENTER,
+    CAMERA_POSITION_INTERIOR_ROW_2_RIGHT,
+    CAMERA_POSITION_INTERIOR_ROW_3_LEFT,
+    CAMERA_POSITION_INTERIOR_ROW_3_CENTER,
+    CAMERA_POSITION_INTERIOR_ROW_3_RIGHT
+};
+
+enum CameraType {
+    CAMERA_TYPE_UNSUPPORTED = -1,
+    CAMERA_TYPE_DEFAULT = 0,
+    CAMERA_TYPE_WIDE_ANGLE,
+    CAMERA_TYPE_ULTRA_WIDE,
+    CAMERA_TYPE_TELEPHOTO,
+    CAMERA_TYPE_TRUE_DEPTH,
+    CAMERA_TYPE_SUPER_TELEPHOTO
+};
+
+enum ConnectionType {
+    CAMERA_CONNECTION_BUILT_IN = 0,
+    CAMERA_CONNECTION_USB_PLUGIN,
+    CAMERA_CONNECTION_REMOTE
+};
+
+enum CameraFoldScreenType {
+    CAMERA_FOLDSCREEN_UNSPECIFIED = 0,
+    CAMERA_FOLDSCREEN_INNER,
+    CAMERA_FOLDSCREEN_OUTER
+};
+
+enum AuxiliaryType {
+    CONTRACTLENS = 0
+};
+
+enum AuxiliaryStatus {
+    AUXILIARY_LOCKED = 0,
+    AUXILIARY_ON,
+    AUXILIARY_OFF
+};
+
+struct flashmode {
+    int count = 0;
+    std::vector<int32_t> mode = {};
+};
+
+struct exposuremode {
+    int count = 0;
+    std::vector<int32_t> mode = {};
+};
+
+struct zoomratiorange {
+    int count = 0;
+    std::vector<int32_t> mode = {};
+    std::unordered_map<int32_t, std::pair<float, float>> range;
+};
+
+struct compensationrange {
+    int count = 0;
+    std::vector<float> range = {};
+};
+
+struct focusmode {
+    int count = 0;
+    std::vector<int32_t> mode = {};
+};
+
+struct stabilizationmode {
+    int count = 0;
+    std::vector<int32_t> mode = {};
+};
+
+struct CameraConcurrentLimtedCapability {
+    flashmode flashmodes;
+    exposuremode exposuremodes;
+    zoomratiorange ratiorange;
+    compensationrange compensation;
+    focusmode focusmodes;
+    stabilizationmode stabilizationmodes;
+    ColorSpaceInfo colorspaces;
+};
+
+class CameraDevice : public RefBase {
+public:
+    explicit CameraDevice(std::string cameraID, std::shared_ptr<OHOS::Camera::CameraMetadata> metadata);
+    [[deprecated]] explicit CameraDevice(
+        std::string cameraID, std::shared_ptr<OHOS::Camera::CameraMetadata> metadata, dmDeviceInfo deviceInfo);
+    explicit CameraDevice(
+        std::string cameraID, dmDeviceInfo deviceInfo, std::shared_ptr<OHOS::Camera::CameraMetadata> metadata);
+    virtual ~CameraDevice() = default;
+    /**
+    * @brief Get the camera Id.
+    *
+    * @return Returns the camera Id.
+    */
+    std::string GetID();
+
+    /**
+    * @brief Get the cachedMetadata corresponding to current camera object.
+    *
+    * @return Returns the cachedMetadata corresponding to current object.
+    */
+    std::shared_ptr<OHOS::Camera::CameraMetadata> GetCachedMetadata();
+
+    /**
+    * @brief Get the metadata corresponding to current camera object.
+    *
+    * @return Returns the metadata corresponding to current object.
+    */
+    [[deprecated]] std::shared_ptr<OHOS::Camera::CameraMetadata> GetMetadata();
+
+    /**
+     * @brief Add metadata to the camera device.
+     *
+     * @param srcMetadata metadata got from proxy from service.
+     */
+    void AddMetadata(std::shared_ptr<OHOS::Camera::CameraMetadata> srcMetadata);
+    
+    /**
+    * @brief Reset cachedMetadata_ to default status
+    */
+    void ResetMetadata();
+
+    /**
+    * @brief Get the current camera static abilities.
+    *
+    * @return Returns the current camera static abilities.
+    */
+    const std::shared_ptr<OHOS::Camera::CameraMetadata> GetCameraAbility();
+
+    /**
+    * @brief Get the position of the camera.
+    *
+    * @return Returns the position of the camera.
+    */
+    CameraPosition GetPosition();
+
+    /**
+    * @brief Get the used as position of the camera.
+    *
+    * @return Returns the used as position of the camera.
+    */
+    CameraPosition GetUsedAsPosition();
+
+    /**
+    * @brief Get the automotive position of the camera.
+    *
+    * @return Returns the automotive position of the camera.
+    */
+    AutomotiveCameraPosition GetAutomotivePosition();
+
+    /**
+    * @brief Get the Camera type of the camera.
+    *
+    * @return Returns the Camera type of the camera.
+    */
+    CameraType GetCameraType();
+
+    /**
+    * @brief Get the Camera connection type.
+    *
+    * @return Returns the Camera type of the camera.
+    */
+    ConnectionType GetConnectionType();
+
+    /**
+    * @brief Get the facing for foldScreen device.
+    *
+    * @return Returns the Camera type of the camera.
+    */
+    CameraFoldScreenType GetCameraFoldScreenType();
+
+    /**
+    * @brief Get the SupportedModes for device.
+    *
+    * @return Returns the SupportedModes of the camera.
+    */
+    std::vector<SceneMode> GetSupportedModes() const;
+
+    /**
+    * @brief Get the SupportedObjectTypes for device.
+    *
+    * @return Returns the Camera SupportedObjectTypes of the camera.
+    */
+    std::vector<MetadataObjectType> GetObjectTypes() const;
+
+    /**
+    * @brief Get the IsPrelaunch for device.
+    *
+    * @return Returns the Camera IsPrelaunch of the camera.
+    */
+    bool IsPrelaunch() const;
+
+    /**
+    * @brief Get the Distributed Camera Host Name.
+    *
+    * @return Returns the  Host Name of the Distributed camera.
+    */
+    std::string GetHostName();
+
+    /**
+    * @brief Get the Distributed Camera deviceType.
+    *
+    * @return Returns the deviceType of the Distributed camera.
+    */
+    uint16_t GetDeviceType();
+
+    /**
+    * @brief Get the Distributed Camera networkId.
+    *
+    * @return Returns the networkId of the Distributed camera.
+    */
+    std::string GetNetWorkId();
+
+    /**
+    * @brief Get the camera orientation.
+    *
+    * @return Returns the camera orientation.
+    */
+    uint32_t GetCameraOrientation();
+
+    /**
+    * @brief Get the camera orientation.
+    *
+    * @return Returns the camera orientation.
+    */
+    uint32_t GetStaticCameraOrientation();
+
+    /**
+    * @brief Get the camera isretractable.
+    *
+    * @return Returns the camera isretractable.
+    */
+    bool GetisRetractable();
+
+    /**
+    * @brief Get the camera lensEquivalentFocalLength.
+    *
+    * @return Returns the camera lensEquivalentFocalLength.
+    */
+    std::vector<int32_t> GetLensEquivalentFocalLength();
+    
+    // or can we move definition completely in session only?
+    /**
+    * @brief Get the supported Zoom Ratio range.
+    *
+    * @return Returns vector<float> of supported Zoom ratio range.
+    */
+    std::vector<float> GetZoomRatioRange();
+
+    /**
+    * @brief Get the supported exposure compensation range.
+    *
+    * @return Returns vector<int32_t> of supported exposure compensation range.
+    */
+    std::vector<float> GetExposureBiasRange();
+
+    void SetProfile(sptr<CameraOutputCapability> cameraOutputCapability);
+    
+    void SetProfile(sptr<CameraOutputCapability> cameraOutputCapability, int32_t modename);
+
+    void SetCameraDeviceUsedAsPosition(CameraPosition usedAsPosition);
+
+    /**
+    * @brief Get the camera is support spec search.
+    *
+    */
+    bool IsSupportSpecSearch();
+
+    /**
+    * @brief Get sensor module type
+    *
+    * @return moduleType sensor module type.
+    */
+    uint32_t GetModuleType();
+
+    /**
+    * @brief Get the supported fold status of the device
+    * @return The supported fold status of the device
+    *
+    * foldStatus enum values:
+    *   0: OHOS_CAMERA_FOLD_STATUS_NONFOLDABLE
+    *   1: OHOS_CAMERA_FOLD_STATUS_EXPANDED
+    *   2: OHOS_CAMERA_FOLD_STATUS_FOLDED
+    *   3: OHOS_CAMERA_FOLD_STATUS_EXPANDED + OHOS_CAMERA_FOLD_STATUS_FOLDED
+    */
+    uint32_t GetSupportedFoldStatus();
+
+    void SetCameraId(std::string devID);
+
+    bool isConcurrentDeviceType();
+
+    void SetConcurrentDeviceType(bool changeType);
+
+    void SetUsePhysicalCameraOrientation(bool isUsed);
+
+    bool GetUsePhysicalCameraOrientation();
+
+    void SetFullPreviewProfiles(int32_t modename, std::vector<Profile> previewProfiles);
+
+    std::vector<Profile> GetFullPreviewProfiles(int32_t modename);
+
+    template<typename T, typename = std::enable_if_t<std::is_same_v<T, Profile> || std::is_same_v<T, VideoProfile>>>
+    std::shared_ptr<T> GetMaxSizeProfile(std::vector<T>& profiles, float profileRatioValue, CameraFormat format)
+    {
+        if (profileRatioValue <= 0) {
+            return nullptr;
+        }
+        std::shared_ptr<T> maxSizeProfile = nullptr;
+        for (auto& profile : profiles) {
+            if (profile.size_.width == 0 || profile.size_.height == 0) {
+                continue;
+            }
+            if (profile.format_ != format) {
+                continue;
+            }
+            float ratio = ((float)profile.size_.width) / profile.size_.height;
+            if (abs(ratio - profileRatioValue) / profileRatioValue > 0.05f) { // 0.05f is 5% tolerance
+                continue;
+            }
+            if (maxSizeProfile == nullptr || profile.size_.width > maxSizeProfile->size_.width) {
+                maxSizeProfile = std::make_shared<T>(profile);
+            }
+        }
+        return maxSizeProfile;
+    }
+
+    inline void ClearModeVideoDeferredType()
+    {
+        std::lock_guard<std::mutex> lock(modeVideoDeferredTypeMtx_);
+        modeVideoDeferredType_.clear();
+    }
+
+    inline void InsertModeVideoDeferredType(int32_t key, int32_t value)
+    {
+        std::lock_guard<std::mutex> lock(modeVideoDeferredTypeMtx_);
+        modeVideoDeferredType_[key] = value;
+    }
+
+    inline int32_t GetModeVideoDeferredType(int32_t key)
+    {
+        std::lock_guard<std::mutex> lock(modeVideoDeferredTypeMtx_);
+        auto it = modeVideoDeferredType_.find(key);
+        if (it == modeVideoDeferredType_.end()) {
+            return OHOS_CAMERA_NOT_SUPPORTED;
+        }
+        return it->second;
+    }
+
+    std::unordered_map<int32_t, std::vector<Profile>> modePreviewProfiles_ = {};
+    std::unordered_map<int32_t, std::vector<Profile>> modePhotoProfiles_ = {};
+    std::unordered_map<int32_t, std::vector<VideoProfile>> modeVideoProfiles_ = {};
+    std::unordered_map<int32_t, std::vector<DepthProfile>> modeDepthProfiles_ = {};
+    std::unordered_map<int32_t, DeferredDeliveryImageType> modeDeferredType_ = {};
+    CameraPosition usedAsCameraPosition_ = CAMERA_POSITION_UNSPECIFIED;
+    CameraConcurrentLimtedCapability limtedCapabilitySave_;
+    int32_t isConcurrentLimted_ = 0;
+private:
+    std::string cameraID_;
+    const std::shared_ptr<OHOS::Camera::CameraMetadata> baseAbility_;
+    std::mutex cachedMetadataMutex_;
+    std::mutex usePhysicalCameraOrientationMutex_;
+    std::shared_ptr<OHOS::Camera::CameraMetadata> cachedMetadata_;
+    CameraPosition cameraPosition_ = CAMERA_POSITION_UNSPECIFIED;
+    AutomotiveCameraPosition cameraAutomotivePosition_ = CAMERA_POSITION_EXTERIOR_UNSPECIFIED;
+    CameraType cameraType_ = CAMERA_TYPE_DEFAULT;
+    ConnectionType connectionType_ = CAMERA_CONNECTION_BUILT_IN;
+    CameraFoldScreenType foldScreenType_ = CAMERA_FOLDSCREEN_UNSPECIFIED;
+    uint32_t cameraOrientation_ = 0;
+    bool isRetractable_ = false;
+    std::vector<int32_t> lensEquivalentFocalLength_ = {};
+    std::unordered_map<uint32_t, uint32_t> foldStateSensorOrientationMap_ = {};
+    std::unordered_map<uint32_t, std::vector<uint32_t>> foldWithDirectionOrientationMap_ = {};
+    uint32_t moduleType_ = 0;
+    uint32_t foldStatus_ = 0;
+    std::vector<SceneMode> supportedModes_ = {};
+    std::vector<MetadataObjectType> objectTypes_ = {};
+    bool isPrelaunch_ = false;
+    bool supportSpecSearch_ = false;
+    dmDeviceInfo dmDeviceInfo_ = {};
+    std::vector<float> zoomRatioRange_;
+    std::vector<float> exposureBiasRange_;
+    static const std::unordered_map<camera_type_enum_t, CameraType> metaToFwCameraType_;
+    static const std::unordered_map<camera_position_enum_t, CameraPosition> metaToFwCameraPosition_;
+    static const std::unordered_map<automotive_camera_position_enum_t, AutomotiveCameraPosition>
+        metaToFwAutomotiveCameraPosition_;
+    static const std::unordered_map<camera_connection_type_t, ConnectionType> metaToFwConnectionType_;
+    static const std::unordered_map<camera_foldscreen_enum_t, CameraFoldScreenType> metaToFwCameraFoldScreenType_;
+    void init(common_metadata_header_t* metadataHeader);
+    void InitLensEquivalentFocalLength(common_metadata_header_t* metadata);
+    void InitVariableOrientation(common_metadata_header_t* metadata);
+    bool isFindModuleTypeTag(uint32_t &tagId);
+    bool isConcurrentDevice_ = false;
+    bool usePhysicalCameraOrientation_ = false;
+    bool isLogicCamera_ = false;
+    bool isVariable_ = false;
+    std::string foldScreenConfig_ = "";
+    
+    std::mutex modeVideoDeferredTypeMtx_;
+    std::mutex modeFullPreviewProfilesMutex_;
+    std::unordered_map<int32_t, int32_t> modeVideoDeferredType_ = {};
+    std::unordered_map<int32_t, std::vector<Profile>> modeFullPreviewProfiles_ = {};
+};
+} // namespace CameraStandard
+} // namespace OHOS
+#endif // OHOS_CAMERA_CAMERA_DEVICE_H

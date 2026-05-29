@@ -1,0 +1,92 @@
+/*
+ * Copyright (c) 2024-2024 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef AUDIO_CAPTURER_SESSION_H
+#define AUDIO_CAPTURER_SESSION_H
+
+#include "audio_capturer.h"
+#include "blocking_queue.h"
+#include "refbase.h"
+#include "audio_record.h"
+#include "audio_deferred_process.h"
+#include <atomic>
+#include <cstdint>
+
+namespace OHOS {
+namespace CameraStandard {
+using namespace AudioStandard;
+using namespace std::chrono;
+constexpr uint32_t DEFAULT_AUDIO_CACHE_NUMBER = 400;
+using ProcessCbFunc = function<void(sptr<AudioRecord>, bool)>;
+class AudioRecordArrivalCallback;
+class AudioCapturerSession : public RefBase, public std::enable_shared_from_this<AudioCapturerSession> {
+public:
+    explicit AudioCapturerSession();
+    ~AudioCapturerSession();
+    bool StartAudioCapture();
+    void ProcessAudioBuffer();
+    void Stop();
+    void Release();
+    void GetAudioRecords(int64_t startTime, int64_t endTime, vector<sptr<AudioRecord>> &audioRecords);
+    AudioChannel getMicNum();
+    AudioStreamInfo deferredInputOptions_;
+    AudioStreamInfo deferredOutputOptions_;
+    void ExecuteOnceRecord(int64_t startTime, int64_t endTime, ProcessCbFunc processCallback);
+    void SetAudioBufferCallback(ProcessCbFunc processAudioFunc);
+    void SetStopAudioRecord();
+
+    inline sptr<AudioRecord> GetBackAudioRecord()
+    {
+        return audioBufferQueue_.Back();
+    }
+
+    inline bool GetProcessedCbFunc()
+    {
+        std::lock_guard<std::mutex> lock(processCallbackMutex_);
+        return processCallback_ == nullptr;
+    }
+
+    inline void UpdateCaptureTimeRangeForEnd(int64_t endTime)
+    {
+        curCaptureTimeRange_.second = endTime;
+    }
+
+private:
+    inline std::shared_ptr<AudioCapturer> GetAudioCapturer()
+    {
+        std::lock_guard<std::mutex> lock(audioCapturerMutex_);
+        return audioCapturer_;
+    }
+
+    inline void SetAudioCapturer(std::shared_ptr<AudioCapturer> audioCapturer)
+    {
+        std::lock_guard<std::mutex> lock(audioCapturerMutex_);
+        audioCapturer_ = audioCapturer;
+    }
+
+    bool CreateAudioCapturer();
+    // Already guard by hcapture_session
+    std::mutex audioCapturerMutex_;
+    std::shared_ptr<AudioCapturer> audioCapturer_ = nullptr;
+    BlockingQueue<sptr<AudioRecord>> audioBufferQueue_;
+    std::atomic<bool> startAudioCapture_ { false };
+    std::unique_ptr<std::thread> audioThread_ = nullptr;
+    std::pair<int64_t, int64_t> curCaptureTimeRange_ = {0, 0};
+    ProcessCbFunc processCallback_ = nullptr;
+    std::mutex processCallbackMutex_;
+};
+} // CameraStandard
+} // OHOS
+#endif // AUDIO_CAPTURER_SESSION_H

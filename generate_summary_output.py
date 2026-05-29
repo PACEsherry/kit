@@ -3,17 +3,66 @@ from pathlib import Path
 from collections import defaultdict
 import ast
 import re
+import time
+import shutil
+import sys
 
 from kit import Repository
+from kit.llm_client_factory import create_openai_client
 
 
-REPO_ROOT = Path(__file__).resolve().parent
-OUTPUT_PATH = REPO_ROOT.parent / "summary_output.md"
+# ── LLM 配置（复用 kit 的 client 工厂） ──────────────────
+LLM_API_KEY = "tp-cbs3hu9i4xsldjtuyl82fj2l9uo2py2qe3ulrhc1zzhj8ij5"
+LLM_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
+LLM_MODEL = "mimo-v2.5-pro"
+
+_client = create_openai_client(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
+
+_last_call_time = 0.0
+
+
+def llm_summarize(prompt: str, max_retries: int = 3) -> str:
+    """调用大模型生成摘要，带重试和速率控制。"""
+    global _last_call_time
+
+    for attempt in range(max_retries):
+        elapsed = time.time() - _last_call_time
+        if elapsed < 0.5:
+            time.sleep(0.5 - elapsed)
+
+        try:
+            _last_call_time = time.time()
+            resp = _client.chat.completions.create(
+                model=LLM_MODEL,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            "你是一个代码分析专家。请用简洁的中文回答，"
+                            "只输出内容本身，不要加任何前缀或解释。\n\n"
+                            + prompt
+                        ),
+                    },
+                ],
+                max_tokens=2000,
+                temperature=0.2,
+            )
+            content = resp.choices[0].message.content
+            return content.strip() if content else ""
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait = 2 * (attempt + 1)
+                print(f"    [LLM 重试 {attempt+1}/{max_retries}] {e}, {wait}s 后重试...")
+                time.sleep(wait)
+            else:
+                print(f"    [LLM 失败] {e}")
+                return ""
+    return ""
+    return ""
 
 
 # ------------------------------------------------------------
-# 基础过滤规则：
-# 只分析常见源码和配置文件，跳过虚拟环境、git、缓存、构建产物等目录。
+# 基础过滤规则
 # ------------------------------------------------------------
 
 SKIP_DIR_PARTS = {
@@ -117,56 +166,76 @@ def first_sentence_from_docstring(node: ast.AST) -> str | None:
 
 
 def py_signature_from_node(node: ast.AST) -> str:
+    """从 AST 节点提取完整的函数/方法签名，包含参数名、类型注解和返回值类型。"""
     if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         return ""
 
-    args = []
+    parts = []
+    args = node.args
+    defaults = args.defaults
+    num_no_default = len(args.args) - len(defaults)
 
-    for arg in node.args.posonlyargs + node.args.args:
-        args.append(arg.arg)
+    for i, arg in enumerate(args.args):
+        if arg.arg == "self":
+            continue
+        param = arg.arg
+        if arg.annotation:
+            try:
+                param += f": {ast.unparse(arg.annotation)}"
+            except Exception:
+                pass
+        default_idx = i - num_no_default
+        if default_idx >= 0:
+            try:
+                param += f" = {ast.unparse(defaults[default_idx])}"
+            except Exception:
+                pass
+        parts.append(param)
 
-    if node.args.vararg:
-        args.append("*" + node.args.vararg.arg)
+    if args.vararg:
+        param = f"*{args.vararg.arg}"
+        if args.vararg.annotation:
+            try:
+                param += f": {ast.unparse(args.vararg.annotation)}"
+            except Exception:
+                pass
+        parts.append(param)
 
-    for arg in node.args.kwonlyargs:
-        args.append(arg.arg)
+    for i, arg in enumerate(args.kwonlyargs):
+        param = arg.arg
+        if arg.annotation:
+            try:
+                param += f": {ast.unparse(arg.annotation)}"
+            except Exception:
+                pass
+        if args.kw_defaults[i] is not None:
+            try:
+                param += f" = {ast.unparse(args.kw_defaults[i])}"
+            except Exception:
+                pass
+        parts.append(param)
 
-    if node.args.kwarg:
-        args.append("**" + node.args.kwarg.arg)
+    if args.kwarg:
+        param = f"**{args.kwarg.arg}"
+        if args.kwarg.annotation:
+            try:
+                param += f": {ast.unparse(args.kwarg.annotation)}"
+            except Exception:
+                pass
+        parts.append(param)
+
+    ret_annotation = ""
+    if node.returns:
+        try:
+            ret_annotation = f" -> {ast.unparse(node.returns)}"
+        except Exception:
+            pass
 
     prefix = "async " if isinstance(node, ast.AsyncFunctionDef) else ""
-    return f"{prefix}{node.name}({', '.join(args)})"
+    return f"{prefix}{node.name}({', '.join(parts)}){ret_annotation}"
 
 
 def parse_python_details(path: str, source: str):
-    """
-    返回：
-    {
-      "classes": {
-        "ClassName": {
-          "extends": "...",
-          "methods": {
-            "methodName": {
-              "signature": "...",
-              "lineno": 1,
-              "end_lineno": 10,
-              "doc": "..."
-            }
-          },
-          "lineno": 1,
-          "end_lineno": 20,
-          "doc": "..."
-        }
-      },
-      "functions": {
-        "funcName": {...}
-      },
-      "assignments": [
-        {"name": "...", "type": "const" / "var", "lineno": 1}
-      ]
-    }
-    """
-
     details = {
         "classes": {},
         "functions": {},
@@ -239,114 +308,261 @@ def parse_python_details(path: str, source: str):
     return details
 
 
-def make_function_summary(name: str, path: str, doc: str | None = None) -> str:
-    if doc:
-        return f"{doc}。"
-
-    lower = name.lower()
-
-    if lower.startswith("get_") or lower.startswith("get"):
-        return f"获取与 `{name}` 相关的数据或对象，供项目内部逻辑调用。"
-    if lower.startswith("set_") or lower.startswith("set"):
-        return f"设置与 `{name}` 相关的状态、配置或对象属性。"
-    if lower.startswith("load_") or lower.startswith("load"):
-        return f"加载与 `{name}` 相关的文件、配置或运行时数据。"
-    if lower.startswith("create_") or lower.startswith("build_"):
-        return f"创建或构建与 `{name}` 相关的对象、索引或中间结果。"
-    if lower.startswith("extract_"):
-        return f"从源码或输入数据中抽取与 `{name}` 相关的结构化信息。"
-    if lower.startswith("search_") or lower.startswith("find_"):
-        return f"搜索或定位与 `{name}` 相关的代码、符号或文本结果。"
-    if lower.startswith("summarize"):
-        return f"对输入内容生成摘要信息，服务于代码理解或检索流程。"
-
-    return f"实现 `{path}` 中的 `{name}` 逻辑，是该模块中的可调用函数单元。"
+# ── LLM 摘要生成（替代原规则逻辑） ─────────────────────────
 
 
-def make_class_summary(name: str, path: str, doc: str | None = None) -> str:
-    if doc:
-        return f"{doc}。"
-
-    lower = name.lower()
-
-    if "repository" in lower:
-        return f"封装代码仓库读取、源码访问、符号抽取或搜索相关能力。"
-    if "summarizer" in lower:
-        return f"封装摘要生成逻辑，用于为文件、函数或类生成自然语言说明。"
-    if "indexer" in lower:
-        return f"封装索引构建逻辑，用于将摘要或代码信息写入可检索索引。"
-    if "searcher" in lower:
-        return f"封装搜索逻辑，用于根据查询返回相关代码或摘要结果。"
-    if "analyzer" in lower:
-        return f"封装分析逻辑，用于理解代码依赖、结构或上下文关系。"
-
-    return f"封装 `{path}` 中与 `{name}` 相关的数据和行为，是项目中的类级实现单元。"
+def make_module_summary(path: str, source: str) -> str:
+    """用 LLM 生成模块级摘要，取前 100 行作为上下文。"""
+    snippet = "\n".join(source.splitlines()[:100])
+    prompt = (
+        f"请分析以下 Python 源码文件 `{path}` 的内容（前 100 行），"
+        f"用 2-3 句中文详细说明这个模块的核心职责和主要功能。\n"
+        f"要求：\n"
+        f"1. 说明这个模块在项目中扮演的角色\n"
+        f"2. 列出它提供的主要能力或接口\n"
+        f"3. 描述它的关键实现方式\n\n"
+        f"```\n{snippet}\n```"
+    )
+    result = llm_summarize(prompt)
+    return result or f"负责 `{Path(path).stem}` 相关功能的实现。"
 
 
-def make_module_summary(path: str) -> str:
-    name = Path(path).stem
-    lower_path = path.lower()
-
-    if "summary" in lower_path or "summar" in lower_path:
-        return "负责代码摘要生成、摘要索引或摘要检索相关逻辑。"
-    if "repo" in lower_path or "repository" in lower_path:
-        return "负责代码仓库抽象、文件读取、符号抽取或源码搜索相关逻辑。"
-    if "search" in lower_path:
-        return "负责代码搜索、文本匹配或检索结果组织相关逻辑。"
-    if "cli" in lower_path:
-        return "负责命令行入口、参数解析和命令调度相关逻辑。"
-    if "mcp" in lower_path:
-        return "负责 MCP 工具暴露、模型上下文协议服务或外部工具调用相关逻辑。"
-    if "test" in lower_path:
-        return "负责测试项目中相关功能是否符合预期。"
-
-    return f"负责 `{name}` 相关功能的实现，是 kit 项目中的源码模块。"
+def make_class_summary(name: str, path: str, source: str, doc: str | None = None) -> str:
+    """用 LLM 生成类级摘要。"""
+    doc_hint = f"\n\n该类已有 docstring：{doc}" if doc else ""
+    prompt = (
+        f"请分析以下 Python 类 `{name}` 的代码（来自文件 `{path}`）{doc_hint}。\n"
+        f"用 2-3 句中文详细说明：\n"
+        f"1. 这个类的核心职责和设计目的\n"
+        f"2. 它封装了哪些主要数据或行为\n"
+        f"3. 它在项目架构中的典型使用场景\n\n"
+        f"```\n{source}\n```"
+    )
+    result = llm_summarize(prompt)
+    return result or f"封装 `{path}` 中与 `{name}` 相关的数据和行为。"
 
 
-def write_header(out):
-    out.append("# Summary Output\n")
-    out.append("> 本文档根据 kit 项目源码自动生成，用于记录代码仓库中的库、模块、类、方法、函数、配置、变量和常量等广义接口摘要。\n")
-    out.append("> 每个条目尽量保持统一结构，方便后续被 AI 检索、理解和定位源码。\n")
-    out.append("\n---\n")
+def make_function_summary(name: str, path: str, source: str, doc: str | None = None) -> str:
+    """用 LLM 生成函数/方法级摘要。"""
+    doc_hint = f"\n\n该函数已有 docstring：{doc}" if doc else ""
+    prompt = (
+        f"请分析以下 Python 函数/方法 `{name}` 的代码（来自文件 `{path}`）{doc_hint}。\n"
+        f"用 2-3 句中文详细说明：\n"
+        f"1. 这个函数的核心功能和处理逻辑\n"
+        f"2. 它的输入参数和返回值的含义\n"
+        f"3. 它在项目中的典型使用场景\n\n"
+        f"```\n{source}\n```"
+    )
+    result = llm_summarize(prompt)
+    return result or f"实现 `{path}` 中的 `{name}` 逻辑。"
 
 
-def add_library_section(out):
-    out.append("# library kit\n")
-    out.append("## function:\n")
-    out.append("kit 是一个代码智能工具包，用于代码库映射、文件读取、符号抽取、代码搜索、摘要生成、摘要索引和面向 AI agent 的代码上下文构建。\n")
-    out.append("## usage example:\n")
-    out.append("```python")
-    out.append("from kit import Repository\n")
-    out.append('repo = Repository("https://github.com/cased/kit")')
-    out.append("symbols = repo.extract_symbols()")
-    out.append("print(symbols[:3])")
-    out.append("```\n")
+def make_config_summary(path: str, source: str) -> str:
+    """用 LLM 生成配置文件摘要。"""
+    snippet = "\n".join(source.splitlines()[:40])
+    prompt = (
+        f"请分析以下配置文件 `{path}` 的内容。\n"
+        f"用 2-3 句中文详细说明：\n"
+        f"1. 这个配置文件控制的功能范围\n"
+        f"2. 它包含的关键配置项和作用\n"
+        f"3. 对项目构建或运行的影响\n\n"
+        f"```\n{snippet}\n```"
+    )
+    result = llm_summarize(prompt)
+    return result or f"该配置文件用于控制 kit 项目的依赖、构建、测试或运行参数。"
 
 
-def add_config_section(out, path: str, source: str):
+def make_usage_example(name: str, kind: str, path: str, source: str, signature: str = "") -> str:
+    """用 LLM 生成使用示例。
+
+    kind: "module" | "class" | "function" | "method" | "config"
+    """
+    # 只取前 20 行代码作为参考，避免 prompt 过长
+    code_hint = "\n".join(source.splitlines()[:20])
+
+    if kind == "module":
+        prompt = (
+            f"请为 Python 模块 `{path}` 生成一个使用示例。\n"
+            f"模块功能参考：\n```\n{code_hint}\n```\n"
+            f"要求：\n"
+            f"1. 第一行开始写 import 语句，必须包含所有依赖\n"
+            f"2. 然后写调用代码，5-10 行\n"
+            f"3. 不要定义新的类或函数\n"
+            f"4. 只输出代码，不要解释\n\n"
+            f"示例格式：\n"
+            f"```python\n"
+            f"from pathlib import Path\n"
+            f"import pathspec\n\n"
+            f"repo = Path('/path/to/repo')\n"
+            f"result = some_function(repo)\n"
+            f"print(result)\n"
+            f"```"
+        )
+    elif kind == "class":
+        prompt = (
+            f"请为 Python 类 `{name}` 生成一个使用示例。\n"
+            f"类定义参考：\n```\n{code_hint}\n```\n"
+            f"要求：\n"
+            f"1. 第一行开始写 import 语句，必须包含所有依赖\n"
+            f"2. 然后实例化类，传入合理参数\n"
+            f"3. 调用 2-3 个主要方法，展示参数和返回值\n"
+            f"4. 总共 8-15 行代码\n"
+            f"5. 不要重新定义类\n"
+            f"6. 只输出代码，不要解释\n\n"
+            f"示例格式：\n"
+            f"```python\n"
+            f"from pathlib import Path\n"
+            f"from kit.code_searcher import CodeSearcher, SearchOptions\n\n"
+            f"searcher = CodeSearcher('/path/to/repo')\n"
+            f"options = SearchOptions(case_sensitive=False)\n"
+            f"results = searcher.search_text('def main', '*.py', options)\n"
+            f"for r in results:\n"
+            f"    print(r['file'], r['line_number'])\n"
+            f"```"
+        )
+    elif kind in ("function", "method"):
+        prompt = (
+            f"为方法 `{name}` 写调用示例。\n"
+            f"签名：`{signature}`\n"
+            f"参考代码：\n```\n{code_hint}\n```\n"
+            f"要求：先写 import，再实例化类（如果是方法），调用函数处理返回值，5-8 行代码，不要定义函数。"
+        )
+    else:
+        return ""
+
+    result = llm_summarize(prompt)
+    if not result:
+        return ""
+    # 清理可能的 markdown 包裹
+    result = result.strip()
+    if result.startswith("```python"):
+        result = result[len("```python"):].strip()
+    if result.startswith("```"):
+        result = result[3:].strip()
+    if result.endswith("```"):
+        result = result[:-3].strip()
+    return result
+
+
+# ── 文档生成 ────────────────────────────────────────────
+
+
+def generate_md_for_file(path, source, repo):
+    """为一个源码文件生成 markdown 内容，返回字符串。"""
     lang = safe_code_block_lang(path)
-    snippet = "\n".join(source.splitlines()[:20]).strip()
+    out = []
 
-    out.append(f"# config {path}\n")
-    out.append("## function:\n")
-    out.append(f"该配置文件用于控制 kit 项目的依赖、构建、测试、文档或运行参数。\n")
-    out.append("## declaration:\n")
-    out.append(f"```{lang}")
-    out.append(snippet)
-    out.append("```\n")
-    out.append("## usage example:\n")
-    out.append("```powershell")
-    out.append(f"# 查看配置文件")
-    out.append(f"Get-Content {path} -TotalCount 40")
-    out.append("```\n")
+    # 文件来源头部
+    out.append(f"<!-- source: {path} -->\n")
+    out.append(f"# `{path}`\n")
+    out.append("---\n")
+
+    if Path(path).suffix == ".py":
+        # Python 文件：模块 + 类 + 方法 + 函数
+        print(f"  [LLM] module: {path}")
+        module_summary = make_module_summary(path, source)
+        module_usage = make_usage_example("", "module", path, source)
+
+        out.append("## module function:\n")
+        out.append(module_summary + "\n")
+        out.append("## module usage example:\n")
+        if module_usage:
+            out.append(f"```{lang}\n{module_usage}\n```\n")
+        else:
+            out.append(f"```{lang}\n# source: {path}\n```\n")
+
+        details = parse_python_details(path, source)
+
+        for class_name, info in details["classes"].items():
+            class_code = get_lines(source, info.get("lineno"), info.get("end_lineno"), max_lines=50)
+            print(f"    [LLM] class: {class_name}")
+            class_summary = make_class_summary(class_name, path, class_code, info.get("doc"))
+            class_usage = make_usage_example(class_name, "class", path, class_code)
+
+            out.append(f"# class `{class_name}`\n")
+            out.append("## function:\n")
+            out.append(class_summary + "\n")
+            out.append("## extends:\n")
+            out.append(f"{info.get('extends') or 'none'}\n")
+            out.append("## usage example:\n")
+            if class_usage:
+                out.append(f"```python\n{class_usage}\n```\n")
+            else:
+                snippet = get_lines(source, info.get("lineno"), info.get("end_lineno"), max_lines=18)
+                out.append(f"```python\n{snippet}\n```\n")
+
+            for method_name, method_info in info["methods"].items():
+                signature = method_info.get("signature") or f"{method_name}(...)"
+                method_code = get_lines(source, method_info.get("lineno"), method_info.get("end_lineno"), max_lines=30)
+                print(f"      [LLM] method: {class_name}.{method_name}")
+                method_summary = make_function_summary(method_name, path, method_code, method_info.get("doc"))
+                method_usage = make_usage_example(method_name, "method", path, method_code, signature)
+
+                out.append(f"# method `{class_name}.{signature}`\n")
+                out.append("## function:\n")
+                out.append(method_summary + "\n")
+                out.append("## usage example:\n")
+                if method_usage:
+                    out.append(f"```python\n{method_usage}\n```\n")
+                else:
+                    snippet = get_lines(source, method_info.get("lineno"), method_info.get("end_lineno"), max_lines=16)
+                    out.append(f"```python\n{snippet}\n```\n")
+
+        for func_name, info in details["functions"].items():
+            signature = info.get("signature") or f"{func_name}(...)"
+            func_code = get_lines(source, info.get("lineno"), info.get("end_lineno"), max_lines=30)
+            print(f"    [LLM] func: {func_name}")
+            func_summary = make_function_summary(func_name, path, func_code, info.get("doc"))
+            func_usage = make_usage_example(func_name, "function", path, func_code, signature)
+
+            out.append(f"# func `{signature}`\n")
+            out.append("## function:\n")
+            out.append(func_summary + "\n")
+            out.append("## usage example:\n")
+            if func_usage:
+                out.append(f"```python\n{func_usage}\n```\n")
+            else:
+                snippet = get_lines(source, info.get("lineno"), info.get("end_lineno"), max_lines=16)
+                out.append(f"```python\n{snippet}\n```\n")
+
+    else:
+        # 非 Python 文件（配置文件等）
+        print(f"  [LLM] config: {path}")
+        summary = make_config_summary(path, source)
+        snippet = "\n".join(source.splitlines()[:30]).strip()
+
+        out.append("## function:\n")
+        out.append(summary + "\n")
+        out.append("## declaration:\n")
+        out.append(f"```{lang}\n{snippet}\n```\n")
+
+    return "\n".join(out)
 
 
-def generate_markdown():
-    repo = Repository(str(REPO_ROOT))
+def generate_markdown(repo_path: str, output_dir: str):
+    """扫描代码库，复制后逐个替换代码文件为 markdown。
 
+    Args:
+        repo_path: 要扫描的代码库路径
+        output_dir: 输出目录路径（会先复制整个代码库到这里）
+    """
+    repo = Repository(repo_path)
+    source_root = Path(repo_path)
+    output = Path(output_dir)
+
+    # 1. 复制代码库
+    if output.exists():
+        shutil.rmtree(output)
+
+    print(f"[COPY] {source_root} -> {output}")
+    shutil.copytree(source_root, output, ignore=shutil.ignore_patterns(
+        ".git", "__pycache__", ".venv", "node_modules", ".pytest_cache",
+        ".mypy_cache", ".ruff_cache", "dist", "build", ".eggs", ".tox",
+    ))
+
+    # 2. 扫描所有源码文件
     file_tree = repo.get_file_tree()
     files = []
-
     for item in file_tree:
         path = item.get("path") or item.get("name") or ""
         is_dir = item.get("is_dir", False)
@@ -355,100 +571,78 @@ def generate_markdown():
 
     source_files = [p for p in files if is_source_file(p)]
     config_files = [p for p in files if is_config_file(p)]
+    all_files = sorted(source_files) + sorted(config_files)
 
-    out = []
-    write_header(out)
-    add_library_section(out)
+    print(f"\n[SCAN] Found {len(all_files)} files to process")
 
-    # 配置文件摘要
-    for path in sorted(config_files):
-        source = read_file(repo, path)
-        if source.strip():
-            add_config_section(out, path, source)
-
-    # 源码模块、类、方法、函数、变量、常量摘要
-    for path in sorted(source_files):
+    # 3. 逐个替换
+    replaced = 0
+    for path in all_files:
         source = read_file(repo, path)
         if not source.strip():
             continue
 
-        lang = safe_code_block_lang(path)
+        print(f"\n[FILE] {path}")
 
-        out.append(f"# module {path}\n")
-        out.append("## function:\n")
-        out.append(make_module_summary(path) + "\n")
-        out.append("## usage example:\n")
-        out.append(f"```{lang}")
-        out.append(f"# source: {path}")
-        out.append("```\n")
+        # 生成 markdown
+        md_content = generate_md_for_file(path, source, repo)
 
-        if Path(path).suffix == ".py":
-            details = parse_python_details(path, source)
+        # 在 copy 目录中找到对应文件
+        out_file = output / path
+        if not out_file.exists():
+            print(f"  [SKIP] not found in copy")
+            continue
 
-            for class_name, info in details["classes"].items():
-                out.append(f"# class {class_name}\n")
-                out.append("## function:\n")
-                out.append(make_class_summary(class_name, path, info.get("doc")) + "\n")
-                out.append("## extends:\n")
-                out.append(f"{info.get('extends') or 'none'}\n")
-                out.append("## implements:\n")
-                out.append("unknown\n")
-                out.append("## usage example:\n")
-                snippet = get_lines(source, info.get("lineno"), info.get("end_lineno"), max_lines=18)
-                out.append("```python")
-                out.append(snippet)
-                out.append("```\n")
+        # 写入 .md 文件（与原文件同目录同名）
+        md_path = out_file.with_suffix(".md")
+        md_path.write_text(md_content, encoding="utf-8")
+        print(f"  [WRITE] {md_path.relative_to(output)}")
 
-                for method_name, method_info in info["methods"].items():
-                    signature = method_info.get("signature") or f"{method_name}(...)"
-                    out.append(f"# method {class_name}.{signature}\n")
-                    out.append("## function:\n")
-                    out.append(make_function_summary(method_name, path, method_info.get("doc")) + "\n")
-                    out.append("## extends:\n")
-                    out.append("none\n")
-                    out.append("## implements:\n")
-                    out.append("none\n")
-                    out.append("## usage example:\n")
-                    snippet = get_lines(source, method_info.get("lineno"), method_info.get("end_lineno"), max_lines=16)
-                    out.append("```python")
-                    out.append(snippet)
-                    out.append("```\n")
+        # 删除原代码文件
+        out_file.unlink()
+        print(f"  [DELETE] {path}")
 
-            for func_name, info in details["functions"].items():
-                signature = info.get("signature") or f"{func_name}(...)"
-                out.append(f"# func {signature}\n")
-                out.append("## function:\n")
-                out.append(make_function_summary(func_name, path, info.get("doc")) + "\n")
-                out.append("## usage example:\n")
-                snippet = get_lines(source, info.get("lineno"), info.get("end_lineno"), max_lines=16)
-                out.append("```python")
-                out.append(snippet)
-                out.append("```\n")
+        replaced += 1
 
-            for item in details["assignments"]:
-                name = item["name"]
-                item_type = item["type"]
-                out.append(f"# {item_type} {name}\n")
-                out.append("## function:\n")
-                if item_type == "const":
-                    out.append(f"`{name}` 是模块级常量，通常用于保存固定配置、默认值、映射规则或路径信息。\n")
-                else:
-                    out.append(f"`{name}` 是模块级变量，通常用于保存运行时状态、配置对象或中间结果。\n")
-                out.append("## usage example:\n")
-                snippet = get_lines(source, item.get("lineno"), item.get("lineno"), max_lines=3)
-                out.append("```python")
-                out.append(snippet)
-                out.append("```\n")
+    print(f"\nDone! Replaced {replaced} files")
+    print(f"Output: {output}")
 
-        else:
-            # 对非 Python 文件，先保留模块级摘要，后续可补充 TS/JS AST 解析。
-            pass
 
-    OUTPUT_PATH.write_text("\n".join(out), encoding="utf-8")
-    print(f"summary_output.md generated: {OUTPUT_PATH}")
-    print(f"source files scanned: {len(source_files)}")
-    print(f"config files scanned: {len(config_files)}")
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="扫描代码库，复制后逐个替换代码文件为 markdown 文档。",
+        epilog="示例:\n"
+               "  python generate_summary_output.py /path/to/repo\n"
+               "  python generate_summary_output.py /path/to/repo -o /path/to/docs\n"
+               "  python generate_summary_output.py . -o ./my_docs",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "repo_path",
+        help="要扫描的代码库路径（支持本地路径或 GitHub URL）",
+    )
+    parser.add_argument(
+        "-o", "--output",
+        default=None,
+        help="输出目录路径（默认: <repo_path>_docs）",
+    )
+
+    args = parser.parse_args()
+
+    repo_path = str(Path(args.repo_path).resolve())
+    if args.output:
+        output_dir = str(Path(args.output).resolve())
+    else:
+        output_dir = str(Path(repo_path).parent / (Path(repo_path).name + "_docs"))
+
+    print(f"Repository: {repo_path}")
+    print(f"Output:     {output_dir}")
+    print("=" * 60)
+
+    generate_markdown(repo_path, output_dir)
 
 
 if __name__ == "__main__":
-    generate_markdown()
+    main()

@@ -1,0 +1,186 @@
+# Copyright (c) 2024 Huawei Device Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build/ohos.gni")
+import("../multimedia_camera_framework.gni")
+
+config("camera_utils_config") {
+  include_dirs = [
+    "include",
+    "include/task_manager",
+    "include/task_manager/task_group",
+    "include/timer",
+    "include/timer/core",
+    "utils",
+    "utils/av_codec/include",
+    "utils/camera_notification/include",
+    "utils/image_framework/include",
+    "utils/media_manager/include",
+    "utils/media_stream/include",
+    "utils/moving_photo/include",
+    "utils/moving_photo/include/avcodec",
+    "utils/moving_photo/include/common",
+    "utils/xcomponent_controller/include",
+    "utils/image_effect/include",
+    "utils/movie_file/include",
+    "utils/watermark_exif_metadata/include",
+    "${multimedia_camera_framework_path}/common",
+    "${multimedia_camera_framework_path}/interfaces/inner_api/native/camera/include",
+    "${multimedia_camera_framework_path}/services/camera_service/include",
+    "${multimedia_camera_framework_path}/services/camera_service/binder/base/include",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/include/base",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/include/utils",
+  ]
+}
+
+common_sources = [
+  "src/task_manager/task_group/base_task_group.cpp",
+  "src/task_manager/task_group/delayed_task_group.cpp",
+  "src/task_manager/task_group/task_group.cpp",
+  "src/task_manager/task_manager.cpp",
+  "src/task_manager/task_registry.cpp",
+  "src/task_manager/thread_pool.cpp",
+  "src/task_manager/thread_utils.cpp",
+  "src/timer/core/timer_core.cpp",
+  "src/timer/steady_clock.cpp",
+  "src/timer/time_broker.cpp",
+  "src/timer/camera_deferred_timer.cpp",
+  "utils/av_codec/src/av_codec_proxy.cpp",
+  "utils/camera_dynamic_loader.cpp",
+  "utils/camera_metadata.cpp",
+  "utils/camera_notification/src/camera_notification_proxy.cpp",
+  "utils/camera_server_photo_proxy.cpp",
+  "utils/camera_simple_timer.cpp",
+  "utils/camera_timer.cpp",
+  "utils/camera_xcollie.cpp",
+  "utils/media_manager/src/media_manager_proxy.cpp",
+  "utils/media_stream/src/recorder_engine_proxy.cpp",
+  "utils/movie_file/src/movie_file_proxy.cpp",
+  "utils/moving_photo/src/moving_photo_proxy.cpp",
+  "utils/media_capability_proxy.cpp",
+  "utils/photo_asset_proxy.cpp",
+  "utils/picture_proxy.cpp",
+  "utils/watermark_exif_metadata/src/watermark_exif_metadata_proxy.cpp",
+  "utils/xcomponent_controller/src/xcomponent_controller_proxy.cpp",
+  "utils/image_effect/src/image_effect_proxy.cpp",
+  "utils/camera_xml_parser.cpp",
+  "utils/watermark_util.cpp",
+]
+common_external_deps = [
+  "bundle_framework:appexecfwk_base",
+  "bundle_framework:appexecfwk_core",
+  "c_utils:utils",
+  "graphic_surface:surface",
+  "hilog:libhilog",
+  "hisysevent:libhisysevent",
+  "hitrace:hitrace_meter",
+  "media_library:media_library_camera_helper",
+  "ipc:ipc_core",
+  "samgr:samgr_proxy",
+  "drivers_interface_camera:libbuffer_handle_sequenceable_1.0",
+  "drivers_interface_camera:libmap_data_sequenceable_1.0",
+  "drivers_interface_camera:metadata",
+  "drivers_interface_display:libdisplay_commontype_proxy_1.0",
+  "drivers_interface_display:libdisplay_commontype_proxy_2.1",
+  "drivers_interface_display:libdisplay_composer_hdi_impl_1.3",
+  "graphic_surface:surface",
+  "hilog:libhilog",
+  "hisysevent:libhisysevent",
+  "hitrace:hitrace_meter",
+  "image_framework:image_native",
+  "ipc:ipc_core",
+  "libxml2:libxml2",
+  "media_foundation:media_foundation",
+  "media_foundation:native_media_core",
+  "samgr:samgr_proxy",
+]
+ohos_shared_library("camera_utils") {
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+
+  branch_protector_ret = "pac_ret"
+  cflags = [
+    "-Werror",
+    "-Os",
+  ]
+
+  deps = [
+    "${multimedia_camera_framework_path}/services/camera_service/idls:camera_idl_sa_proxy",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/idls:camera_deferred_idl_sa_proxy",
+  ]
+
+  external_deps = common_external_deps
+  sources = common_sources
+
+  defines = []
+
+  if (hicollie_enable) {
+    external_deps += [ "hicollie:libhicollie" ]
+    defines += [ "HICOLLIE_ENABLE" ]
+  }
+
+  if (use_power_manager) {
+    external_deps += [ "power_manager:powermgr_client" ]
+    defines += [ "CAMERA_USE_POWER" ]
+  }
+
+  if (camera_framework_feature_capture_yuv) {
+    defines += [ "CAMERA_CAPTURE_YUV" ]
+  }
+
+  public_configs = [
+    ":camera_utils_config",
+    "../services/camera_service/idls:camera_sa_idl_config",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/idls:deferred_processing_service_idl_config",
+  ]
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}
+
+ohos_static_library("camera_utils_static") {
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+
+  branch_protector_ret = "pac_ret"
+  cflags = [
+    "-Werror",
+    "-Os",
+  ]
+
+  sources = common_sources
+  external_deps = common_external_deps
+  defines = []
+  if (hicollie_enable) {
+    external_deps += [ "hicollie:libhicollie" ]
+    defines += [ "HICOLLIE_ENABLE" ]
+  }
+
+  if (use_power_manager) {
+    external_deps += [ "power_manager:powermgr_client" ]
+    defines += [ "CAMERA_USE_POWER" ]
+  }
+
+  public_configs = [
+    ":camera_utils_config",
+    "../services/camera_service/idls:camera_sa_idl_config",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/idls:deferred_processing_service_idl_config",
+  ]
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}

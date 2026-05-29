@@ -1,0 +1,563 @@
+# Copyright (c) 2025 Huawei Device Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build/ohos.gni")
+import("./../multimedia_camera_framework.gni")
+
+config("camera_dynamic_medialibrary_public_config") {
+  include_dirs = [
+    "${multimedia_camera_framework_path}/dynamic_libs/media_library/include",
+    "${multimedia_camera_framework_path}/dynamic_libs/dfx/include"
+  ]
+}
+ohos_shared_library("camera_dynamic_medialibrary") {
+  install_enable = true
+  sources = [
+    "${multimedia_camera_framework_path}/dynamic_libs/dfx/src/dfx_report.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_library/src/photo_asset_adapter.cpp"
+  ]
+  cflags = [
+    "-fPIC",
+    "-Wall",
+    "-Os",
+  ]
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+  include_dirs = [
+    "${multimedia_camera_framework_path}/common/utils" ,
+    "${multimedia_camera_framework_path}/dynamic_libs/dfx/include",
+  ]
+  public_configs = [ ":camera_dynamic_medialibrary_public_config" ]
+  if (target_cpu == "arm") {
+    cflags += [ "-DBINDER_IPC_32BIT" ]
+  }
+
+  external_deps = [
+    "c_utils:utils",
+    "data_share:datashare_common",
+    "data_share:datashare_consumer",
+    "hilog:libhilog",
+    "hisysevent:libhisysevent",
+    "hitrace:hitrace_meter",
+    "image_framework:image_native",
+    "ipc:ipc_single",
+    "media_library:media_library_camera_helper",
+    "samgr:samgr_proxy",
+  ]
+
+  defines = []
+
+  if (camera_framework_feature_capture_yuv) {
+    defines += [ "CAMERA_CAPTURE_YUV" ]
+  }
+
+  cflags_cc = cflags
+
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}
+
+config("camera_dynamic_picture_public_config") {
+  include_dirs = [
+    "${multimedia_camera_framework_path}/dynamic_libs/image_framework/include",
+    "${multimedia_camera_framework_path}/dynamic_libs/dfx/include"
+  ]
+}
+
+ohos_shared_library("camera_dynamic_picture") {
+  install_enable = true
+  sources = [
+    "${multimedia_camera_framework_path}/dynamic_libs/dfx/src/dfx_report.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/image_framework/src/picture_adapter.cpp",
+  ]
+  cflags = [
+    "-fPIC",
+    "-Wall",
+    "-Os",
+  ]
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+  include_dirs = [
+    "${multimedia_camera_framework_path}/common/utils",
+    "${multimedia_camera_framework_path}/dynamic_libs/dfx/include",
+    "${multimedia_camera_framework_path}/common/utils/image_framework/include",
+  ]
+  public_configs = [ ":camera_dynamic_picture_public_config" ]
+  if (target_cpu == "arm") {
+    cflags += [ "-DBINDER_IPC_32BIT" ]
+  }
+
+  external_deps = [
+    "c_utils:utils",
+    "hilog:libhilog",
+    "hisysevent:libhisysevent",
+    "hitrace:hitrace_meter",
+    "image_framework:image_native",
+    "ipc:ipc_single",
+    "samgr:samgr_proxy",
+  ]
+
+  defines = []
+
+  if (camera_framework_feature_capture_yuv) {
+    defines += [ "CAMERA_CAPTURE_YUV" ]
+  }
+
+  cflags_cc = cflags
+
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}
+
+config("camera_dynamic_avcodec_public_config") {
+  include_dirs = [
+    "${multimedia_camera_framework_path}/dynamic_libs/av_codec/include",
+  ]
+}
+
+ohos_shared_library("camera_dynamic_avcodec") {
+  install_enable = true
+  sources = [ "${multimedia_camera_framework_path}/dynamic_libs/av_codec/src/av_codec_adapter.cpp" ]
+  cflags = [
+    "-fPIC",
+    "-Wall",
+    "-Os",
+  ]
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+  include_dirs = [
+    "${multimedia_camera_framework_path}/common/utils",
+    "${multimedia_camera_framework_path}/common/utils/av_codec/include", ]
+  public_configs = [ ":camera_dynamic_avcodec_public_config" ]
+  if (target_cpu == "arm") {
+    cflags += [ "-DBINDER_IPC_32BIT" ]
+  }
+
+  external_deps = [
+    "av_codec:av_codec_client",
+    "av_codec:native_media_acodec",
+    "av_codec:native_media_codecbase",
+    "c_utils:utils",
+    "hilog:libhilog",
+    "hisysevent:libhisysevent",
+    "hitrace:hitrace_meter",
+    "ipc:ipc_single",
+    "samgr:samgr_proxy",
+    "graphic_surface:buffer_handle",
+    "graphic_surface:surface",
+  ]
+
+  cflags_cc = cflags
+
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}
+
+
+config("camera_dynamic_moving_photo_public_config") {
+  include_dirs = [
+    "${multimedia_camera_framework_path}/common/",
+    "${multimedia_camera_framework_path}/common/utils",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/include",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/include/avcodec",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/include/common",
+    "${multimedia_camera_framework_path}/interfaces/inner_api/native/camera/include",
+    "${multimedia_camera_framework_path}/interfaces/inner_api/native/camera/include/output",
+    "${multimedia_camera_framework_path}/interfaces/inner_api/native/camera/include/utils/",
+    "${multimedia_camera_framework_path}/services/camera_service/binder/base/include",
+    "${multimedia_camera_framework_path}/services/camera_service/include",
+    "${multimedia_camera_framework_path}/services/camera_service/include/camera_buffer_manager",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/include/base",
+  ]
+}
+
+ohos_shared_library("camera_dynamic_moving_photo") {
+  install_enable = true
+  sources = [
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/moving_photo_adapter.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/avcodec/audio_capturer_session.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/avcodec/audio_deferred_process.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/avcodec/audio_encoder.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/avcodec/audio_video_muxer.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/avcodec/avcodec_task_manager.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/avcodec/moving_photo_video_cache.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/avcodec/sample_callback.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/avcodec/video_encoder.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/common/frame_record.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/common/moving_photo_listener.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/common/moving_photo_manager.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/common/sample_info.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/moving_photo/src/moving_photo_surface_wrapper.cpp",
+    "${multimedia_camera_framework_path}/frameworks/native/camera/base/src/output/camera_photo_proxy.cpp",
+  ]
+  cflags = [
+    "-fPIC",
+    "-Wall",
+    "-Os",
+  ]
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+  include_dirs = [
+  ]
+
+  deps = [
+    "${multimedia_camera_framework_path}/common:camera_utils",
+  ]
+
+  public_configs = [
+    ":camera_dynamic_moving_photo_public_config",
+    "${multimedia_camera_framework_path}/services/camera_service/idls:camera_sa_idl_config",
+  ]
+
+  if (target_cpu == "arm") {
+    cflags += [ "-DBINDER_IPC_32BIT" ]
+  }
+
+  external_deps = [
+    "ability_base:base",
+    "access_token:libtokensetproc_shared",
+    "audio_framework:audio_capturer",
+    "audio_framework:audio_client",
+    "audio_framework:offline_audio_effect",
+    "av_codec:av_codec_client",
+    "av_codec:native_media_acodec",
+    "av_codec:native_media_codecbase",
+    "bundle_framework:appexecfwk_base",
+    "bundle_framework:appexecfwk_core",
+    "c_utils:utils",
+    "drivers_interface_camera:libbuffer_handle_sequenceable_1.0",
+    "drivers_interface_camera:libcamera_proxy_1.0",
+    "drivers_interface_camera:libcamera_proxy_1.1",
+    "drivers_interface_camera:libcamera_proxy_1.2",
+    "drivers_interface_camera:libcamera_proxy_1.3",
+    "drivers_interface_camera:libcamera_proxy_1.4",
+    "drivers_interface_camera:libmap_data_sequenceable_1.0",
+    "drivers_interface_camera:metadata",
+    "drivers_interface_display:libdisplay_commontype_proxy_1.0",
+    "graphic_surface:surface",
+    "graphic_surface:sync_fence",
+    "hilog:libhilog",
+    "hisysevent:libhisysevent",
+    "hitrace:hitrace_meter",
+    "ipc:ipc_core",
+    "media_foundation:media_foundation",
+    "media_foundation:native_media_core",
+    "media_library:media_library_camera_helper",
+    "samgr:samgr_proxy",
+  ]
+  defines = []
+
+  if (hicollie_enable) {
+    external_deps += [ "hicollie:libhicollie" ]
+    defines += [ "HICOLLIE_ENABLE" ]
+  }
+
+  cflags_cc = cflags
+  cflags_cc += ["-std=c++20",]
+
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}
+
+config("camera_dynamic_media_manager_public_config") {
+  include_dirs = [
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/include",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/include/media_manager",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/include/base",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/include/utils",
+  ]
+}
+
+config("camera_dynamic_notification_public_config") {
+  include_dirs = [
+    "${multimedia_camera_framework_path}/common/utils",
+    "${multimedia_camera_framework_path}/common/utils/camera_notification/include",
+    "${multimedia_camera_framework_path}/common/utils/image_framework/include",
+  ]
+}
+
+ohos_shared_library("camera_dynamic_media_manager") {
+  install_enable = true
+  sources = [
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/src/media_manager_adapter.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/src/media_manager/demuxer.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/src/media_manager/media_manager.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/src/media_manager/mpeg_manager_factory.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/src/media_manager/mpeg_manager.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/src/media_manager/muxer.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/src/media_manager/reader.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/src/media_manager/track_factory.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/src/media_manager/track.cpp",
+    "${multimedia_camera_framework_path}/dynamic_libs/media_manager/src/media_manager/writer.cpp",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/src/utils/dp_utils.cpp",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/src/base/dps_fd.cpp",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/src/base/media_progress_notifier.cpp",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/src/dfx/dps_event_report.cpp",
+  ]
+  cflags = [
+    "-fPIC",
+    "-Wall",
+    "-Os",
+  ]
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+  include_dirs = [
+    "${multimedia_camera_framework_path}/common/utils",
+    "${multimedia_camera_framework_path}/common/utils/media_manager/include",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/include/dfx",
+  ]
+
+  deps = [
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/idls:camera_deferred_idl_sa_proxy",
+  ]
+
+  public_configs = [
+    ":camera_dynamic_media_manager_public_config",
+    "${multimedia_camera_framework_path}/services/deferred_processing_service/idls:deferred_processing_service_idl_config", ]
+  if (target_cpu == "arm") {
+    cflags += [ "-DBINDER_IPC_32BIT" ]
+  }
+
+  external_deps = [
+    "av_codec:av_codec_client",
+    "av_codec:native_media_acodec",
+    "av_codec:native_media_aenc",
+    "av_codec:native_media_avcencinfo",
+    "av_codec:native_media_avdemuxer",
+    "av_codec:native_media_avmuxer",
+    "av_codec:native_media_avsource",
+    "av_codec:native_media_codecbase",
+    "av_codec:native_media_venc",
+    "bundle_framework:appexecfwk_base",
+    "bundle_framework:appexecfwk_core",
+    "c_utils:utils",
+    "drivers_interface_camera:libcamera_proxy_1.0",
+    "drivers_interface_camera:libcamera_proxy_1.1",
+    "drivers_interface_camera:libcamera_proxy_1.2",
+    "drivers_interface_camera:libcamera_proxy_1.3",
+    "drivers_interface_camera:libcamera_proxy_1.4",
+    "drivers_interface_camera:libmap_data_sequenceable_1.0",
+    "drivers_interface_camera:metadata",
+    "hilog:libhilog",
+    "hisysevent:libhisysevent",
+    "hitrace:hitrace_meter",
+    "image_framework:image_native",
+    "ipc:ipc_core",
+    "ipc:ipc_single",
+    "samgr:samgr_proxy",
+    "graphic_surface:buffer_handle",
+    "graphic_surface:surface",
+    "graphic_surface:sync_fence",
+  ]
+
+  cflags_cc = cflags
+
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}
+
+ohos_shared_library("camera_dynamic_notification") {
+  install_enable = true
+  sources = [
+    "${multimedia_camera_framework_path}/dynamic_libs/camera_notification/src/camera_notification.cpp",
+  ]
+  cflags = [
+    "-fPIC",
+    "-Wall",
+    "-Os",
+  ]
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+  include_dirs = [
+    "${multimedia_camera_framework_path}/dynamic_libs/camera_notification/include",
+  ]
+
+  public_configs = [":camera_dynamic_notification_public_config"]
+  if (target_cpu == "arm") {
+    cflags += [ "-DBINDER_IPC_32BIT" ]
+  }
+
+  deps = [
+    "${multimedia_camera_framework_path}/common:camera_utils",
+  ]
+
+  external_deps = [
+    "ability_base:base",
+    "ability_base:zuri",
+    "distributed_notification_service:ans_innerkits",
+    "hilog:libhilog",
+    "hisysevent:libhisysevent",
+    "i18n:intl_util",
+    "os_account:libaccountkits",
+    "os_account:os_account_innerkits",
+  ]
+
+  cflags_cc = cflags
+
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}
+
+config("camera_dynamic_xcomponent_controller_public_config") {
+  include_dirs = [
+    "${multimedia_camera_framework_path}/dynamic_libs/xcomponent_controller/include",
+  ]
+}
+ohos_shared_library("camera_dynamic_xcomponent_controller") {
+  install_enable = true
+  sources = [
+    "${multimedia_camera_framework_path}/dynamic_libs/xcomponent_controller/src/xcomponent_controller_adapter.cpp"
+  ]
+  cflags = [
+    "-fPIC",
+    "-Wall",
+    "-Os",
+  ]
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+  include_dirs = [
+    "${multimedia_camera_framework_path}/common/utils" ,
+    "${multimedia_camera_framework_path}/common/utils/xcomponent_controller/include",
+  ]
+  public_configs = [ ":camera_dynamic_xcomponent_controller_public_config" ]
+  if (target_cpu == "arm") {
+    cflags += [ "-DBINDER_IPC_32BIT" ]
+  }
+
+  external_deps = [
+    "ace_engine:ace_xcomponent_controller",
+    "hilog:libhilog",
+    "hisysevent:libhisysevent",
+    "hitrace:hitrace_meter",
+  ]
+
+  cflags_cc = cflags
+
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}
+
+config("camera_dynamic_image_effect_public_config") {
+  include_dirs = [
+    "${multimedia_camera_framework_path}/dynamic_libs/image_effect/include",
+  ]
+}
+ohos_shared_library("camera_dynamic_image_effect") {
+  install_enable = true
+  sources = []
+  cflags = [
+    "-fPIC",
+    "-Wall",
+    "-Os",
+  ]
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+  include_dirs = [
+    "${multimedia_camera_framework_path}/common/utils" ,
+    "${multimedia_camera_framework_path}/common/utils/image_effect/include",
+  ]
+  public_configs = [ ":camera_dynamic_image_effect_public_config" ]
+  if (target_cpu == "arm") {
+    cflags += [ "-DBINDER_IPC_32BIT" ]
+  }
+
+  external_deps = [
+    "hilog:libhilog",
+    "hisysevent:libhisysevent",
+    "hitrace:hitrace_meter",
+    "graphic_surface:surface",
+    "image_framework:image_native",
+    "c_utils:utils",
+  ]
+
+  if (use_image_effect) {
+    external_deps += [ "image_effect:image_effect_impl" ]
+    sources += [
+      "${multimedia_camera_framework_path}/dynamic_libs/image_effect/src/image_effect_adapter.cpp"
+    ]
+  }
+
+  use_exceptions = true
+
+  cflags_cc = cflags
+
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}
+
+ohos_shared_library("camera_dynamic_watermark_exif_metadata") {
+  install_enable = true
+  sources = [
+    "${multimedia_camera_framework_path}/dynamic_libs/watermark_exif_metadata/src/watermark_exif_metadata_adapter.cpp"
+  ]
+  cflags = [
+    "-fPIC",
+    "-Wall",
+    "-Os",
+  ]
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+  include_dirs = [
+    "${multimedia_camera_framework_path}/common/utils",
+    "${multimedia_camera_framework_path}/common/utils/watermark_exif_metadata/include",
+    "${multimedia_camera_framework_path}/dynamic_libs/watermark_exif_metadata/include"
+  ]
+
+  deps = [
+    "${multimedia_camera_framework_path}/common:camera_utils",
+  ]
+
+  if (target_cpu == "arm") {
+    cflags += [ "-DBINDER_IPC_32BIT" ]
+  }
+
+  external_deps = [
+    "image_framework:image_native",
+    "hilog:libhilog",
+    "hisysevent:libhisysevent",
+    "libexif:libexif",
+  ]
+  defines = []
+  cflags_cc = cflags
+  cflags_cc += ["-std=c++11",]
+
+  part_name = "camera_framework"
+  subsystem_name = "multimedia"
+}

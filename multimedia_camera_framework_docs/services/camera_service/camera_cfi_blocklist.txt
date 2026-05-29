@@ -1,0 +1,4 @@
+[cfi]
+type:*OHOS::CameraStandard::IMockSessionManagerInterface*
+type:*OHOS::CameraStandard::ISessionManagerService*
+type:*OHOS::CameraStandard::ISceneSessionManager*

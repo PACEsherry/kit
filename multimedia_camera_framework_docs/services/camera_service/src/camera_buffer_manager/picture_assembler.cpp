@@ -1,0 +1,81 @@
+/*
+ * Copyright (c) 2025 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// LCOV_EXCL_START
+#include "picture_assembler.h"
+
+#include "camera_log.h"
+#include "hstream_capture.h"
+#include "photo_asset_auxiliary_consumer.h"
+
+namespace OHOS {
+namespace CameraStandard {
+
+PictureAssembler::PictureAssembler(wptr<HStreamCapture> streamCapture)
+    : streamCapture_(streamCapture)
+{
+    MEDIA_INFO_LOG("PictureAssembler new E");
+}
+
+PictureAssembler::~PictureAssembler()
+{
+    MEDIA_INFO_LOG("PictureAssembler ~ E");
+}
+
+void PictureAssembler::RegisterAuxiliaryConsumers()
+{
+    MEDIA_INFO_LOG("RegisterAuxiliaryConsumers E");
+    sptr<HStreamCapture> streamCapture = streamCapture_.promote();
+    CHECK_RETURN_ELOG(streamCapture == nullptr, "streamCapture is null");
+    SurfaceError ret;
+    std::string retStr = "";
+    auto gainmapSurfaceObj = streamCapture->gainmapSurface_.Get();
+    if (gainmapSurfaceObj != nullptr) {
+        MEDIA_INFO_LOG("RegisterAuxiliaryConsumers 1 surfaceId: %{public}" PRIu64, gainmapSurfaceObj->GetUniqueId());
+        streamCapture->gainmapListener_ = new (std::nothrow) AuxiliaryBufferConsumer(S_GAINMAP, streamCapture);
+        CHECK_RETURN_ELOG(streamCapture->gainmapListener_ == nullptr, "streamCapture->gainmapListener_ is null");
+        ret = gainmapSurfaceObj->RegisterConsumerListener(
+            (sptr<IBufferConsumerListener> &)streamCapture->gainmapListener_);
+        retStr = ret != SURFACE_ERROR_OK ? retStr + "[gainmap]" : retStr;
+    }
+    auto deepSurfaceObj = streamCapture->deepSurface_.Get();
+    if (deepSurfaceObj != nullptr) {
+        MEDIA_INFO_LOG("RegisterAuxiliaryConsumers 2 surfaceId: %{public}" PRIu64, deepSurfaceObj->GetUniqueId());
+        streamCapture->deepListener_ = new (std::nothrow) AuxiliaryBufferConsumer(S_DEEP, streamCapture);
+        CHECK_RETURN_ELOG(streamCapture->deepListener_ == nullptr, "streamCapture->deepListener_ is null");
+        ret = deepSurfaceObj->RegisterConsumerListener((sptr<IBufferConsumerListener> &)streamCapture->deepListener_);
+        retStr = ret != SURFACE_ERROR_OK ? retStr + "[deep]" : retStr;
+    }
+    auto exifSurfaceObj = streamCapture->exifSurface_.Get();
+    if (exifSurfaceObj != nullptr) {
+        MEDIA_INFO_LOG("RegisterAuxiliaryConsumers 3 surfaceId: %{public}" PRIu64, exifSurfaceObj->GetUniqueId());
+        streamCapture->exifListener_ = new (std::nothrow) AuxiliaryBufferConsumer(S_EXIF, streamCapture);
+        CHECK_RETURN_ELOG(streamCapture->exifListener_ == nullptr, "streamCapture->exifListener_ is null");
+        ret = exifSurfaceObj->RegisterConsumerListener((sptr<IBufferConsumerListener> &)streamCapture->exifListener_);
+        retStr = ret != SURFACE_ERROR_OK ? retStr + "[exif]" : retStr;
+    }
+    auto debugSurfaceObj = streamCapture->debugSurface_.Get();
+    if (debugSurfaceObj != nullptr) {
+        MEDIA_INFO_LOG("RegisterAuxiliaryConsumers 4 surfaceId: %{public}" PRIu64, debugSurfaceObj->GetUniqueId());
+        streamCapture->debugListener_ = new (std::nothrow) AuxiliaryBufferConsumer(S_DEBUG, streamCapture);
+        CHECK_RETURN_ELOG(streamCapture->debugListener_ == nullptr, "streamCapture->debugListener_ is null");
+        ret = debugSurfaceObj->RegisterConsumerListener((sptr<IBufferConsumerListener> &)streamCapture->debugListener_);
+        retStr = ret != SURFACE_ERROR_OK ? retStr + "[debug]" : retStr;
+    }
+    CHECK_PRINT_ELOG(retStr != "", "register surface consumer listener failed! type = %{public}s", retStr.c_str());
+    MEDIA_INFO_LOG("RegisterAuxiliaryConsumers X");
+}
+}  // namespace CameraStandard
+}  // namespace OHOS
+// LCOV_EXCL_STOP

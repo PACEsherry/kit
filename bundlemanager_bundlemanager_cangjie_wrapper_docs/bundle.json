@@ -1,0 +1,51 @@
+{
+    "name": "@ohos/bundlemanager_cangjie_wrapper",
+    "description": "The bundlemanager_cangjie_wrapper is a Cangjie API encapsulated on OpenHarmony based on the bundle_framework subsystem.",
+    "version": "6.1",
+    "license": "Apache License 2.0",
+    "segment": {
+        "destPath": "foundation/bundlemanager/bundlemanager_cangjie_wrapper"
+    },
+    "component": {
+        "name": "bundlemanager_cangjie_wrapper",
+        "subsystem": "bundlemanager",
+        "syscap": [],
+        "features": [],
+        "hisysevent_config": [],
+        "adapted_system_type": [
+            "standard"
+        ],
+        "rom": "400KB",
+        "ram": "468KB",
+        "deps": {
+            "components": [
+                "cangjie_ark_interop",
+                "global_cangjie_wrapper",
+                "hiviewdfx_cangjie_wrapper",
+                "bundle_framework",
+                "ability_runtime"
+            ]
+        },
+        "build": {
+            "sub_component": [
+                "//foundation/bundlemanager/bundlemanager_cangjie_wrapper/ohos/bundle/bundle_manager:ohos.bundle.bundle_manager",
+                "//foundation/bundlemanager/bundlemanager_cangjie_wrapper/ohos/element_name:ohos.element_name",
+                "//foundation/bundlemanager/bundlemanager_cangjie_wrapper/ohos/metadata:ohos.metadata",
+                "//foundation/bundlemanager/bundlemanager_cangjie_wrapper/ohos/skill:ohos.skill",
+                "//foundation/bundlemanager/bundlemanager_cangjie_wrapper/ohos/zlib:ohos.zlib"
+            ],
+            "inner_kits": [
+              {
+                "name": "//foundation/bundlemanager/bundlemanager_cangjie_wrapper/ohos/bundle/bundle_manager:ohos.bundle.bundle_manager"
+              },
+              {
+                "name": "//foundation/bundlemanager/bundlemanager_cangjie_wrapper/ohos/element_name:ohos.element_name"
+              },
+              {
+                "name": "//foundation/bundlemanager/bundlemanager_cangjie_wrapper:copy_sdk_bundlemanager_cangjie_libs"
+              }
+            ],
+            "test": []
+        }
+    }
+}
